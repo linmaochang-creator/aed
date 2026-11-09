@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="AED遙控器">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>AED 訓練語音遙控器</title>
+<style>
+:root{--bg:#111827;--card:#1f2937;--txt:#f9fafb;--sub:#9ca3af;--ok:#16a34a;--warn:#f59e0b;--red:#dc2626;--blue:#2563eb}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:-apple-system,"Noto Sans TC","PingFang TC",sans-serif;overscroll-behavior:none}
+body{padding:env(safe-area-inset-top) 10px env(safe-area-inset-bottom);display:flex;flex-direction:column;min-height:100%}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 4px}
+h1{font-size:18px;margin:0}
+.hbtn{background:var(--card);color:var(--txt);border:0;border-radius:10px;padding:8px 12px;font-size:15px}
+#status{font-size:14px;color:var(--sub);text-align:center;min-height:22px;padding-bottom:6px}
+#status b{color:var(--warn)}
+main{display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:1}
+.k{border:0;border-radius:18px;color:#fff;font-size:20px;font-weight:700;line-height:1.3;padding:10px 8px;min-height:104px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;box-shadow:0 4px 0 rgba(0,0,0,.35);transition:transform .05s}
+.k:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.35)}
+.k .n{font-size:26px;opacity:.9}
+.k small{font-size:13px;font-weight:400;opacity:.85}
+.k.playing{outline:4px solid #fff;animation:pulse .8s infinite}
+@keyframes pulse{50%{outline-color:transparent}}
+.c1,.c2{background:#2563eb}
+.c3{background:#7c3aed}
+.c4{background:#d97706}
+.c5{background:#ca8a04;color:#111}
+.c6{background:#16a34a}
+.c7{background:#dc2626}
+.c8{background:#0891b2}
+.c9{background:#db2777}
+#stop{margin:12px 0 8px;height:64px;border:0;border-radius:16px;background:#374151;color:#fff;font-size:20px;font-weight:700}
+dialog{width:92%;max-width:420px;border:0;border-radius:16px;background:var(--card);color:var(--txt);padding:16px}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+dialog h2{margin:0 0 10px;font-size:17px}
+.row{margin:12px 0}
+.row label{display:block;font-size:14px;color:var(--sub);margin-bottom:4px}
+input[type=range]{width:100%}
+select{width:100%;padding:8px;border-radius:8px;background:#111827;color:#fff;border:1px solid #374151;font-size:15px}
+.cust{display:flex;align-items:center;gap:6px;margin:6px 0;font-size:14px}
+.cust span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cust button{background:#374151;color:#fff;border:0;border-radius:8px;padding:6px 10px;font-size:13px}
+.note{font-size:12px;color:var(--sub);line-height:1.5}
+</style>
+</head>
+<body>
+<header>
+  <h1>🫀 AED 訓練語音遙控器</h1>
+  <button class="hbtn" id="openSet">⚙ 設定</button>
+</header>
+<div id="status">點按鍵播放語音</div>
+<main id="pad"></main>
+<button id="stop">■ 全部停止</button>
+
+<dialog id="dlg">
+  <h2>設定</h2>
+  <div class="row"><label>音量 <span id="volv"></span></label><input type="range" id="vol" min="0" max="1" step="0.05"></div>
+  <div class="row"><label>語音速度 <span id="ratev"></span></label><input type="range" id="rate" min="0.7" max="1.4" step="0.05"></div>
+  <div class="row"><label>語音聲音（依手機內建而定）</label><select id="voiceSel"></select></div>
+  <div class="row"><label>節拍器／音樂速度（BPM）<span id="bpmv"></span></label><input type="range" id="bpm" min="100" max="130" step="1"></div>
+  <div class="row"><label>自訂音檔（可選，未設定時使用內建語音／合成音）</label><div id="custList"></div>
+    <p class="note">可上傳自己錄的 mp3／m4a／wav，取代任一按鍵。檔案只存在這支手機，離線可用。按鍵 9 可上傳自己的 120 BPM 音樂。</p></div>
+  <div class="row"><button class="hbtn" id="testV">試聽語音</button> <button class="hbtn" id="closeSet" style="float:right">完成</button></div>
+</dialog>
+<input type="file" id="file" accept="audio/*" hidden>
+
+<script>
+const BTN = [
+ {id:1,t:"貼電擊片",s:"按照圖示貼在病人胸部皮膚上",say:"按照圖示，貼在病人胸部皮膚上。",c:"c1",type:"v",auto:1},
+ {id:2,t:"插插頭",s:"插頭插在亮燈處插座",say:"將電擊片插頭，插在亮燈處插座上。",c:"c2",type:"v",auto:1},
+ {id:3,t:"分析心率",s:"不要觸碰病人",say:"正在分析病人心率，不要觸碰病人。",c:"c3",type:"v",auto:1},
+ {id:4,t:"建議電擊・充電",s:"不要接觸病人身體",say:"建議電擊，正在充電，不要接觸病人身體。",c:"c4",type:"v",auto:1},
+ {id:5,t:"立刻電擊",s:"按下黃色閃動按鈕",say:"立刻進行電擊，按下黃色閃動按鈕。",c:"c5",type:"v",auto:1},
+ {id:6,t:"電擊完成",s:"",say:"電擊完成。",c:"c6",type:"v"},
+ {id:7,t:"開始 CPR",s:"開始心肺復甦術",say:"開始心肺復甦術。",c:"c7",type:"v"},
+ {id:8,t:"節拍器",s:"120 次／分",c:"c8",type:"m"},
+ {id:9,t:"音樂",s:"120 BPM",c:"c9",type:"s"}
+];
+const $=s=>document.querySelector(s);
+const store={get(k,d){try{const v=localStorage.getItem('aed_'+k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('aed_'+k,JSON.stringify(v))}catch(e){}}};
+let S={vol:store.get('vol',1),rate:store.get('rate',0.95),voice:store.get('voice',''),bpm:store.get('bpm',120)};
+
+/* ---------- IndexedDB for custom audio ---------- */
+let db;
+const dbReady=new Promise(res=>{try{const r=indexedDB.open('aed',1);r.onupgradeneeded=()=>r.result.createObjectStore('f');r.onsuccess=()=>{db=r.result;res()};r.onerror=()=>res()}catch(e){res()}});
+const dbOp=(mode,fn)=>new Promise(res=>{if(!db)return res();const t=db.transaction('f',mode);const rq=fn(t.objectStore('f'));t.oncomplete=()=>res(rq&&rq.result);t.onerror=()=>res()});
+const getF=id=>dbOp('readonly',s=>s.get(id));
+const putF=(id,b)=>dbOp('readwrite',s=>s.put(b,id));
+const delF=id=>dbOp('readwrite',s=>s.delete(id));
+const names={};  // custom file names
+
+/* ---------- Audio engine ---------- */
+let ctx,master;
+function ensureCtx(){
+  if(!ctx){ctx=new (window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.connect(ctx.destination)}
+  master.gain.value=S.vol;
+  if(ctx.state==='suspended')ctx.resume();
+}
+let curAudio=null,curBtn=null,mTimer=null,mOn=false,sOn=false,nextT=0,beat=0;
+
+function setStatus(h){$('#status').innerHTML=h}
+function mark(){
+  document.querySelectorAll('.k').forEach(k=>{
+    const id=+k.dataset.id;
+    k.classList.toggle('playing',(curBtn===id)||(id===8&&mOn)||(id===9&&sOn));
+  });
+}
+function stopVoice(){
+  try{speechSynthesis.cancel()}catch(e){}
+  if(curAudio){curAudio.pause();curAudio=null}
+  curBtn=null;
+}
+function stopLoops(){
+  mOn=false;sOn=false;clearInterval(mTimer);mTimer=null;
+}
+function stopAll(){stopVoice();stopLoops();mark();setStatus('已停止')}
+
+/* voice buttons */
+async function playVoice(b){
+  ensureCtx();
+  stopVoice();
+  if(b.auto){stopLoops()}   // 分析/充電/電擊時自動停止節拍
+  curBtn=b.id;mark();
+  setStatus('播放中：<b>'+b.id+'. '+(b.say||b.t)+'</b>');
+  const blob=await getF('b'+b.id);
+  const end=()=>{if(curBtn===b.id){curBtn=null;mark();setStatus('點按鍵播放語音')}};
+  if(blob){
+    const a=new Audio(URL.createObjectURL(blob));a.volume=S.vol;curAudio=a;a.onended=end;a.onerror=end;a.play().catch(end);
+  }else{
+    speak(b.say,end);
+  }
+}
+let voices=[];
+function loadVoices(){
+  voices=(speechSynthesis.getVoices()||[]);
+  const sel=$('#voiceSel');sel.innerHTML='';
+  const zh=voices.filter(v=>/zh|cmn|yue/i.test(v.lang));
+  const list=zh.length?zh:voices;
+  list.forEach(v=>{const o=document.createElement('option');o.value=v.voiceURI;o.textContent=v.name+' ('+v.lang+')';sel.appendChild(o)});
+  if(!list.length){sel.innerHTML='<option>找不到語音，請到手機設定安裝中文語音</option>'}
+  if(S.voice&&list.some(v=>v.voiceURI===S.voice))sel.value=S.voice;
+}
+function pickVoice(){
+  const v=voices.find(v=>v.voiceURI===S.voice)||voices.find(v=>/zh[-_]TW/i.test(v.lang))||voices.find(v=>/zh/i.test(v.lang));
+  return v;
+}
+function speak(text,done){
+  if(!('speechSynthesis' in window)){setStatus('此瀏覽器不支援語音合成，請上傳自訂音檔');return done&&done()}
+  const u=new SpeechSynthesisUtterance(text);
+  const v=pickVoice();if(v){u.voice=v;u.lang=v.lang}else u.lang='zh-TW';
+  u.rate=S.rate;u.volume=S.vol;
+  u.onend=done;u.onerror=done;
+  speechSynthesis.speak(u);
+}
+if('speechSynthesis' in window){loadVoices();speechSynthesis.onvoiceschanged=loadVoices}
+
+/* ---------- Metronome & synthesized music at BPM ---------- */
+function click(t,accent){
+  const o=ctx.createOscillator(),g=ctx.createGain();
+  o.type='square';o.frequency.value=accent?1500:1000;
+  g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(accent?0.9:0.6,t+0.002);g.gain.exponentialRampToValueAtTime(0.0001,t+0.06);
+  o.connect(g);g.connect(master);o.start(t);o.stop(t+0.08);
+}
+function tone(t,f,dur,type,vol){
+  const o=ctx.createOscillator(),g=ctx.createGain();
+  o.type=type;o.frequency.value=f;
+  g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+0.01);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g);g.connect(master);o.start(t);o.stop(t+dur+0.02);
+}
+function kick(t){
+  const o=ctx.createOscillator(),g=ctx.createGain();
+  o.frequency.setValueAtTime(150,t);o.frequency.exponentialRampToValueAtTime(45,t+0.12);
+  g.gain.setValueAtTime(0.9,t);g.gain.exponentialRampToValueAtTime(0.0001,t+0.18);
+  o.connect(g);g.connect(master);o.start(t);o.stop(t+0.2);
+}
+// 原創 8 小節旋律（C 大調，每拍一個音，MIDI 音高；0 為休止）
+const MEL=[72,76,79,76, 74,77,81,77, 76,79,83,79, 72,79,76,72,
+           69,72,76,72, 71,74,77,74, 72,76,79,76, 67,71,74,79];
+const BASS=[48,48,53,53,55,55,48,48];
+const mf=n=>440*Math.pow(2,(n-69)/12);
+function scheduler(){
+  const spb=60/S.bpm;
+  while(nextT<ctx.currentTime+0.25){
+    if(mOn)click(nextT,beat%4===0);
+    if(sOn){
+      kick(nextT);
+      const m=MEL[beat%MEL.length];if(m)tone(nextT,mf(m),spb*0.9,'triangle',0.35);
+      if(beat%4===0)tone(nextT,mf(BASS[Math.floor(beat/4)%BASS.length]),spb*3.6,'sine',0.5);
+      if(beat%2===1)tone(nextT+spb/2,8000,0.03,'square',0.05);
+    }
+    nextT+=spb;beat++;
+  }
+}
+let customMusic=null;
+async function startLoop(kind){
+  ensureCtx();
+  if(kind==='s'){
+    const blob=await getF('b9');
+    if(blob){
+      stopVoice();stopLoops();
+      customMusic=new Audio(URL.createObjectURL(blob));customMusic.loop=true;customMusic.volume=S.vol;
+      curAudio=customMusic;customMusic.play();sOn=true;mark();setStatus('播放中：<b>9. 音樂（自訂）</b>');return;
+    }
+  }
+  const wasM=mOn,wasS=sOn;
+  if(kind==='m'){mOn=!wasM;sOn=false}else{sOn=!wasS;mOn=false}
+  if(!mOn&&!sOn){clearInterval(mTimer);mTimer=null;mark();setStatus('已停止');return}
+  stopVoice();
+  beat=0;nextT=ctx.currentTime+0.08;
+  clearInterval(mTimer);mTimer=setInterval(scheduler,50);scheduler();
+  mark();setStatus('播放中：<b>'+(kind==='m'?'8. 節拍器 '+S.bpm+' 次/分':'9. 音樂 '+S.bpm+' BPM')+'</b>');
+}
+function press(b){
+  if(navigator.vibrate)navigator.vibrate(15);
+  if(b.type==='v')playVoice(b);
+  else if(b.type==='m'){if(sOn&&customMusic){stopVoice();stopLoops()}startLoop('m')}
+  else{
+    if(sOn&&customMusic){stopVoice();stopLoops();mark();setStatus('已停止');return}
+    startLoop('s');
+  }
+}
+
+/* ---------- UI ---------- */
+const pad=$('#pad');
+BTN.forEach(b=>{
+  const k=document.createElement('button');
+  k.className='k '+b.c;k.dataset.id=b.id;
+  k.innerHTML='<span class="n">'+b.id+'</span><span>'+b.t+'</span>'+(b.s?'<small>'+b.s+'</small>':'');
+  k.addEventListener('click',()=>press(b));
+  pad.appendChild(k);
+});
+$('#stop').onclick=stopAll;
+
+const dlg=$('#dlg');
+function syncUI(){
+  $('#vol').value=S.vol;$('#volv').textContent=Math.round(S.vol*100)+'%';
+  $('#rate').value=S.rate;$('#ratev').textContent=S.rate.toFixed(2)+'x';
+  $('#bpm').value=S.bpm;$('#bpmv').textContent=S.bpm;
+}
+$('#openSet').onclick=async()=>{syncUI();await renderCust();dlg.showModal()};
+$('#closeSet').onclick=()=>dlg.close();
+$('#vol').oninput=e=>{S.vol=+e.target.value;store.set('vol',S.vol);if(master)master.gain.value=S.vol;if(curAudio)curAudio.volume=S.vol;syncUI()};
+$('#rate').oninput=e=>{S.rate=+e.target.value;store.set('rate',S.rate);syncUI()};
+$('#bpm').oninput=e=>{S.bpm=+e.target.value;store.set('bpm',S.bpm);syncUI()};
+$('#voiceSel').onchange=e=>{S.voice=e.target.value;store.set('voice',S.voice)};
+$('#testV').onclick=()=>{speechSynthesis.cancel();speak('正在分析病人心率，不要觸碰病人。')};
+
+let pendingId=null;
+async function renderCust(){
+  const box=$('#custList');box.innerHTML='';
+  for(const b of BTN.filter(b=>b.type!=='m')){
+    const has=await getF('b'+b.id);
+    const d=document.createElement('div');d.className='cust';
+    d.innerHTML='<span>'+b.id+'. '+b.t+'：'+(has?'已自訂':'內建')+'</span>';
+    const up=document.createElement('button');up.textContent='上傳';
+    up.onclick=()=>{pendingId=b.id;$('#file').click()};
+    d.appendChild(up);
+    if(has){const r=document.createElement('button');r.textContent='還原';r.onclick=async()=>{await delF('b'+b.id);renderCust()};d.appendChild(r)}
+    box.appendChild(d);
+  }
+}
+$('#file').onchange=async e=>{
+  const f=e.target.files[0];e.target.value='';
+  if(f&&pendingId){await putF('b'+pendingId,f);await renderCust()}
+};
+
+/* keep screen awake */
+let wl=null;
+async function lockScreen(){try{if('wakeLock' in navigator)wl=await navigator.wakeLock.request('screen')}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')lockScreen()});
+document.addEventListener('click',lockScreen,{once:true});
+
+dbReady.then(()=>{});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
